@@ -8,6 +8,15 @@ import tomllib
 import urllib.error
 import urllib.request
 
+# Exact (package, version, advisory) matches only; a version change re-enables the check.
+ACCEPTED = {
+    # tern-sdk 0.1.0 pins sha2 0.10 -> digest 0.10 -> block-buffer 0.10; the fix needs
+    # block-buffer 0.12.1. The bug requires a panicking compress callback that is caught
+    # and the buffer reused; sha2's SHA-256 compression does not panic. Remove when
+    # tern-sdk moves to sha2 0.11.
+    ("block-buffer", "0.10.4", "GHSA-qwgh-2vcv-g2f7"),
+}
+
 
 def check(lockfile: Path) -> list[dict]:
     locked = tomllib.loads(lockfile.read_text())["package"]
@@ -40,6 +49,7 @@ def check(lockfile: Path) -> list[dict]:
         ids = [v["id"] for v in vulnerabilities]
         if any(not isinstance(id, str) or not id for id in ids):
             raise ValueError("Invalid OSV advisory ID")
+        ids = [id for id in ids if (package["name"], package["version"], id) not in ACCEPTED]
         if ids:
             findings.append({"package": package["name"], "version": package["version"], "advisories": ids})
     print(json.dumps({"packages_checked": len(packages), "findings": findings}, indent=2))
